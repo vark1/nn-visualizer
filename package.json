@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "gradiatorjs": "^0.1.2",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
+  }
+}
