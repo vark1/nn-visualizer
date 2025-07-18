@@ -13,8 +13,8 @@ async function loadFile(URL: string){
 }
 
 export async function prepareCatvnoncatData() {
-    const testURL = 'http://127.0.0.1:5500/datasets/catvnoncat/test_catvnoncat.h5';
-    const trainURL = 'http://127.0.0.1:5500/datasets/catvnoncat/train_catvnoncat.h5';
+    const testURL = 'http://localhost:5173/datasets/catvnoncat/test_catvnoncat.h5';
+    const trainURL = 'http://localhost:5173/datasets/catvnoncat/train_catvnoncat.h5';
 
     const hdf5_train = await loadFile(trainURL);
     const hdf5_test = await loadFile(testURL);
@@ -111,8 +111,8 @@ async function loadMNISTData(imagesURL: string, labelsURL: string) {
 }
 
 export async function prepareMNISTData() {
-    const imagesURL = 'http://127.0.0.1:5500/datasets/mnist/gz/train-images-idx3-ubyte.gz';
-    const labelsURL = 'http://127.0.0.1:5500/datasets/mnist/gz/train-labels-idx1-ubyte.gz';
+    const imagesURL = 'http://localhost:5173/datasets/mnist/gz/train-images-idx3-ubyte.gz.bin';
+    const labelsURL = 'http://localhost:5173/datasets/mnist/gz/train-labels-idx1-ubyte.gz.bin';
 
     try {
         const data = await loadMNISTData(imagesURL, labelsURL);

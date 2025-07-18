@@ -1,20 +1,18 @@
-import { DATASET_HDF5_TEST, DATASET_HDF5_TRAIN, catvnoncat_prepareDataset } from '../../src/js/utils/utils_datasets.js';
-import { Val } from '../../src/val.js'
-import { sigmoid } from '../../src/activations.js'
-import { add, mul, sum, log, dot, div, mean, abs, sub } from '../../src/ops.js'
+import { prepareCatvnoncatData } from '../../src/utils/utils_datasets.js'
+import { Val, act, op } from 'gradiatorjs'
 
 function propagate(w: Val, b: Val, X: Val, Y: Val) : [{dw: Val; db: Val}, Val]{
     let m = X.shape[1]
-    let z = add(dot(w.T, X), b)
-    let A = sigmoid(z)
+    let z = op.add(op.dot(w.T, X), b)
+    let A = act.sigmoid(z)
 
-    // cost = -1/m * sum(Y*log(A) + (1-Y)*log(1-A))
-    let cost = mul(-1/m, sum(add(mul(Y,log(A)), mul(sub(1, Y), log(sub(1, A))))))
+    // cost = -1/m * op.sum(Y*log(A) + (1-Y)*log(1-A))
+    let cost = op.mul(-1/m, op.sum(op.add(op.mul(Y,op.log(A)), op.mul(op.sub(1, Y), op.log(op.sub(1, A))))))
 
     // backprop
-    let dZ = sub(A, Y)
-    let dw = mul(dot(X, dZ.T), 1/m)     // dw = 1/m * (X.(A-Y).T)
-    let db = mul(sum(dZ), 1/m)          // db = 1/m * sum(A-Y)
+    let dZ = op.sub(A, Y)
+    let dw = op.mul(op.dot(X, dZ.T), 1/m)     // dw = 1/m * (X.(A-Y).T)
+    let db = op.mul(op.sum(dZ), 1/m)          // db = 1/m * sum(A-Y)
 
     let grads = {dw, db}
     return [grads, cost]
@@ -35,8 +33,8 @@ function optimize(w: Val, b: Val, X: Val, Y: Val, num_iterations=100, learning_r
         dw = grads['dw']
         db = grads['db']
 
-        w_ = sub(w_, mul(learning_rate, dw))
-        b_ = sub(b_, mul(learning_rate, db))
+        w_ = op.sub(w_, op.mul(learning_rate, dw))
+        b_ = op.sub(b_, op.mul(learning_rate, db))
 
         if (i % 100 === 0) {
             costs.push(cost.data)
@@ -55,7 +53,7 @@ function predict(w: Val, b: Val, X: Val) : Val {
     let m = X.shape[1]
     let Y_prediction = new Val([1, m])
     w = w.reshape([X.shape[0], 1])
-    let A = sigmoid(add(dot(w.T, X), b))
+    let A = act.sigmoid(op.add(op.dot(w.T, X), b))
 
     for (let i=0; i<A.shape[1]; i++) {
         if(A.data[i] > 0.5) {
@@ -79,8 +77,8 @@ export function model(X_train: Val, Y_train: Val, X_test: Val, Y_test: Val, iter
     let Y_prediction_test = predict(w, b, X_test)
 
     if(print_cost) {
-        console.log(`train accuracy: ${sub(100, mul(100, mean(abs(sub(Y_prediction_train, Y_train))))).data[0]}`)
-        console.log(`test accuracy: ${sub(100, mul(100, mean(abs(sub(Y_prediction_test, Y_test))))).data[0]}`)
+        console.log(`train accuracy: ${op.sub(100, op.mul(100, op.mean(op.abs(op.sub(Y_prediction_train, Y_train))))).data[0]}`)
+        console.log(`test accuracy: ${op.sub(100, op.mul(100, op.mean(op.abs(op.sub(Y_prediction_test, Y_test))))).data[0]}`)
     }
 
     let res = {
@@ -97,12 +95,18 @@ export function model(X_train: Val, Y_train: Val, X_test: Val, Y_test: Val, iter
 }
 
 const button = document.getElementById('run_model_btn');
-if (button) {
-    button.addEventListener('click', function() {
-        if(DATASET_HDF5_TEST && DATASET_HDF5_TRAIN) {
-            let [train_x, train_y, test_x, test_y] = catvnoncat_prepareDataset()
-            let logistic_regression_model = model(train_x, train_y, test_x, test_y, 2000, 0.005, true)
-            console.log(logistic_regression_model)
-        }
-    });
+
+let train_x: Val, train_y: Val, test_x: Val, test_y: Val;
+async function loadData() {
+    const catvnoncat_data = await prepareCatvnoncatData();
+    train_x = catvnoncat_data['train_x'];
+    train_y = catvnoncat_data['train_y'];
+    test_x = catvnoncat_data['test_x'];
+    test_y = catvnoncat_data['test_y'];
 }
+
+button?.addEventListener('click', function() {
+    loadData();
+    let logistic_regression_model = model(train_x, train_y, test_x, test_y, 2000, 0.005, true)
+    console.log(logistic_regression_model)
+});

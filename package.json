@@ -1,7 +1,30 @@
 {
+  "name": "nn-visualizer",
+  "version": "1.0.0",
+  "description": "in browser visualizer for neural nets",
+  "homepage": "https://github.com/vark1/nn-visualizer#readme",
+  "bugs": {
+    "url": "https://github.com/vark1/nn-visualizer/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vark1/nn-visualizer.git"
+  },
+  "license": "ISC",
+  "author": "Varun K",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
   "dependencies": {
-    "gradiatorjs": "^0.1.2",
+    "gradiatorjs": "^0.1.4",
     "tsx": "^4.20.3",
     "typescript": "^5.8.3"
+  },
+  "devDependencies": {
+    "vite": "^7.0.5"
   }
 }

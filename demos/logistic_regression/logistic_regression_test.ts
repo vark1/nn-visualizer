@@ -1,4 +1,4 @@
-import { Val } from "../../src/val.js"
+import { Val } from "gradiatorjs"
 
 function Test() {
     let w = new Val([2,1]) 

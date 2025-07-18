@@ -1,6 +1,4 @@
-import { Val } from "../../val.js";
-import * as op from "../../ops.js"  // Assuming you have ops.ts with add, mul, etc.
-import { tanh } from "../../activations.js"
+import { Val, op, act } from "gradiatorjs";
 
 /* 
 --------------------------------------------------------------------------------------------------------
@@ -20,7 +18,7 @@ const x1w1x2w2 = op.add(x1w1, x2w2);
 
 const b = new Val([], 6.881373587019532);
 const n = op.add(x1w1x2w2, b);
-const o = tanh(n);
+const o = act.tanh(n);
 
 console.log("Forward pass:");
 console.log("Output:", o.data[0]);
@@ -42,7 +40,7 @@ console.log("x1w1 + x2w2: ", x1w1x2w2.data[0], x1w1x2w2.grad[0])   // -6, 0.5
 console.log("b:", b.data[0], b.grad[0]);            // 6.8814, 0.5
 
 console.log("n [x1w1+x2w2 + b]:", n.data[0], n.grad[0]);            // 0.8814, 0.5
-console.log("o [tanh(n)]:", o.data[0], o.grad[0]);            // 0.7071, 1
+console.log("o [act.tanh(n)]:", o.data[0], o.grad[0]);            // 0.7071, 1
 
 /* 
 --------------------------------------------------------------------------------------------------------

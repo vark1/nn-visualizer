@@ -1,4 +1,4 @@
-import { Val } from "../../src/val.js"
+import { Val } from "gradiatorjs"
 import * as fn from '../deep_nn/deep_nn.js'
 
 // TODO: Change console.log to assert

@@ -1,4 +1,4 @@
-import { Val, trainModel, loss, state, model,  } from "gradiatorjs";
+import { Val, trainModel, loss, state, model } from "gradiatorjs";
 import { TrainingProgress, visPackage, NetworkParams } from "./types.js";
 
 import { prepareCatvnoncatData, prepareMNISTData } from "./utils/utils_datasets.js";

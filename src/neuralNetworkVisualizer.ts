@@ -1,4 +1,4 @@
-import { SerializableNNLayer, LayerCreationOptions, DatasetOption, ActivationType, LayerType, NNLayer } from "./types.js";
+import type { SerializableNNLayer, LayerCreationOptions, DatasetOption, ActivationType, LayerType, NNLayer } from "./types.js";
 import { getLayerColor } from "./utils/utils_vis.js";
 import { PRESETS } from "./utils/utils_vis_preset.js";
 
