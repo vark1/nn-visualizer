@@ -188,7 +188,7 @@ export class NeuralNetworkVisualizer {
     }
 
     // Converts the current network layer structure into a serializable JSON object.
-    private getNetworkConfig(): SerializableNNLayer[] {
+    getNetworkConfig(): SerializableNNLayer[] {
         return this.layers.map(layer => {
             const { element, ...serializableLayer} = layer;
             return serializableLayer;

@@ -38,11 +38,9 @@ export interface MinMaxInfo {
 }
 
 export interface NetworkParams {
-    loss_fn: (Y_pred: Val, Y_true: Val) => Val,
     l_rate: number,
     epochs: number,
     batch_size: number,
-    multiClass: boolean
 }
 
 export interface TrainingProgress{
@@ -59,7 +57,37 @@ export type LayerCreationOptions = DenseLayerOptions | ConvLayerOptions | MaxPoo
 
 // When loading a network from the localstorage, this defines what parts of the layer data we want to save.
 // We explicitly omit the 'element' property as it's not serializable.
-export type SerializableNNLayer = Omit<NNLayer, 'element'>;
+export type SerializableNNLayer = SerializableDenseLayer | SerializableConvLayer | SerializableMaxPoolLayer | SerializableFlattenLayer;
+
+interface SerializableBaseLayer {
+    id: string
+}
+
+export interface SerializableDenseLayer extends SerializableBaseLayer {
+    type: 'dense';
+    neurons: number;
+    activation: ActivationType;
+}
+
+export interface SerializableConvLayer extends SerializableBaseLayer {
+    type: 'conv';
+    out_channels: number;
+    kernel_size: number;
+    stride: number;
+    padding: number;
+    activation: ActivationType;
+}
+
+export interface SerializableMaxPoolLayer extends SerializableBaseLayer {
+    type: 'maxpool';
+    pool_size: number;
+    stride: number;
+}
+
+export interface SerializableFlattenLayer extends SerializableBaseLayer {
+    type: 'flatten';
+}
+
 
 // options stored in localstorage
 interface DenseLayerOptions {

@@ -1,5 +1,5 @@
 import { Val, util, act, layer, model } from 'gradiatorjs';
-import { NNLayer } from './types.js';
+import { NNLayer, SerializableNNLayer } from './types.js';
 import { NeuralNetworkVisualizer } from '../src/neuralNetworkVisualizer.js';
 
 const AFN_MAP = {
@@ -10,15 +10,17 @@ const AFN_MAP = {
 }
 
 export function createEngineModelFromVisualizer(
-    visualizer: NeuralNetworkVisualizer,
+    visualizerData: SerializableNNLayer[],
     input: Val
 ): [model.Sequential, boolean] {
+    util.assert(visualizerData && visualizerData.length !== 0, () => `Visualizer data has no layers defined.`);
+    
+    const vizLayers: SerializableNNLayer[] = visualizerData;
 
-    const errors = visualizer.validateNetwork();
-    util.assert (errors.length === 0, ()=> `Invalid network configuration: ${errors.join(', ')}`)
+    // const errors = visualizer.validateNetwork();
+    // util.assert (errors.length === 0, ()=> `Invalid network configuration: ${errors.join(', ')}`)
 
-    const vizLayers: NNLayer[] = (visualizer as any).layers;
-    util.assert(vizLayers && vizLayers.length !== 0, ()=> `Visualizer has no layers defined.`)
+    // const vizLayers: NNLayer[] = (visualizer as any).layers;
 
     const engineLayers: layer.Module[] = [];
     let currentH: number | undefined = input.shape[1];

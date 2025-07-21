@@ -1,4 +1,4 @@
-import { Val, trainModel, loss, state, model } from "gradiatorjs";
+import { Val, trainModel, loss, state, model, layer } from "gradiatorjs";
 import { TrainingProgress, visPackage, NetworkParams } from "./types.js";
 
 import { prepareCatvnoncatData, prepareMNISTData } from "./utils/utils_datasets.js";
@@ -68,80 +68,20 @@ document.addEventListener('DOMContentLoaded', () => {
     lossGraph = new LossGraph('loss-accuracy-chart');
 })
 
-document.getElementById('download-model-btn')?.addEventListener('click', () => {
-    if (!currentModel) {
-        alert("No trained model available to downlaod. please run training first");
-        return;
-    }
-    
-    try {
-        const modelJSON = currentModel.toJSON();
-        downloadObjectAsJSON(modelJSON, 'trained_model.json');
-    } catch (error) {
-        console.error("Failed to serialize or download model:", error);
-        alert("Error: Could not download model. Check console for details.");
-    }
-});
+// document.getElementById('download-model-btn')?.addEventListener('click', () => {
+//     if (!currentModel) {
+//         alert("No trained model available to downlaod. please run training first");
+//         return;
+//     }
+//     try {
+//         const modelJSON = currentModel.toJSON();
+//         downloadObjectAsJSON(modelJSON, 'trained_model.json');
+//     } catch (error) {
+//         console.error("Failed to serialize or download model:", error);
+//         alert("Error: Could not download model. Check console for details.");
+//     }
+// });
 
-async function loadDataset() {
-    const datasetType = (<HTMLSelectElement>document.getElementById('dataset-select')).value;
-    let X = new Val([]);
-    let Y = new Val([]);
-
-    if (datasetType === 'mnist') {
-        const [mnist_x_train, mnist_y_train] = await prepareMNISTData();
-        X = mnist_x_train;
-        Y = mnist_y_train;
-    } else if (datasetType === 'catvnoncat') {
-        const catvnoncat_data = await prepareCatvnoncatData();
-        X = catvnoncat_data['train_x'];
-        Y = catvnoncat_data['train_y'];
-    }
-    return [X, Y]
-}
-
-async function handleTraining() {
-    if (!VISUALIZER) { console.error("Visulizer has not yet loaded for it to run the model."); return; }
-    if (lossGraph) lossGraph.reset();
-
-    state.setTrainingState('TRAINING');
-    updateBtnStates();
-
-    const [X, Y] = await loadDataset();
-
-    const [model, multiClass] = createEngineModelFromVisualizer(VISUALIZER, X);
-    currentModel = model;
-    
-    const params: NetworkParams = {
-        loss_fn: multiClass? loss.crossEntropyLoss_softmax: loss.crossEntropyLoss_binary,
-        l_rate: parseFloat((<HTMLInputElement>document.getElementById('learning-rate')).value) || 0.01,
-        epochs: parseInt((<HTMLInputElement>document.getElementById('epoch')).value) || 500,
-        batch_size: parseInt((<HTMLInputElement>document.getElementById('batch-size')).value) || 100,
-        multiClass: multiClass
-    }
-
-    const trainingCallbacks = {
-        onBatchEnd: (progress: TrainingProgress) => {
-            updateTrainingStatusUI(progress.epoch, progress.batch_idx, progress.loss, progress.accuracy, progress.iterTime);
-            if (progress.visData && currentModel) {
-                updateActivationVis(currentModel, progress.visData);
-            }
-        }
-    };
-
-    try {
-        await trainModel(currentModel, X, Y, params, trainingCallbacks);
-        if (statusElement) statusElement.textContent = 'Training finished.'
-    } catch (error: any) {
-        console.error("Training failed:", error);
-        if (statusElement) statusElement.textContent = `Error: ${error.message || error}`;
-    } finally {
-        state.setTrainingState('IDLE');
-        updateBtnStates();
-        console.log("handleTraining finished, state set to IDLE.");
-    }
-    console.log(model);
-}
 
 function updateTrainingStatusUI(epoch: number, batch_idx: number, loss: number, accuracy: number, iterTime: number) {
     statusElement.textContent = `
@@ -164,4 +104,93 @@ function updateActivationVis(model: model.Sequential, visData: visPackage) {
 
     const { sampleX, sampleY_label, layerOutputs } = visData;
     renderNetworkGraph(graphContainer, layerOutputs, model, sampleX, sampleY_label)
+}
+
+async function loadDataset() {
+    const datasetType = (<HTMLSelectElement>document.getElementById('dataset-select')).value;
+    let X = new Val([]);
+    let Y = new Val([]);
+
+    if (datasetType === 'mnist') {
+        const [mnist_x_train, mnist_y_train] = await prepareMNISTData();
+        X = mnist_x_train;
+        Y = mnist_y_train;
+    } else if (datasetType === 'catvnoncat') {
+        const catvnoncat_data = await prepareCatvnoncatData();
+        X = catvnoncat_data['train_x'];
+        Y = catvnoncat_data['train_y'];
+    }
+    return [X, Y]
+}
+
+const worker = new Worker(new URL('./worker.ts', import.meta.url), {
+    type: 'module'
+});
+
+worker.onmessage = (event) => {
+    const {type, epoch, batch_idx, loss, accuracy, iterTime, visData} = event.data;
+
+    if (type === 'batchEnd') {
+
+        const newSampleX = new Val(visData.sampleX.shape);
+        newSampleX.data = new Float64Array(visData.sampleX.data);
+
+        const reconstructedVisData = {
+            sampleX: newSampleX,
+            sampleY_label: visData.sampleY_label,
+            layerOutputs: visData.layerOutputs.map((x: any) => {
+                const layerOutput: { Z?: Val, A?: Val } = {};
+
+                if (x.Zdata && x.Zshape) {
+                    layerOutput.Z = new Val(x.Zshape);
+                    layerOutput.Z.data = new Float64Array(x.Zdata);
+                }
+                if (x.Adata && x.Ashape) {
+                    layerOutput.A = new Val(x.Ashape);
+                    layerOutput.A.data = new Float64Array(x.Adata)
+                }
+                return layerOutput;
+            })
+        }
+
+        updateTrainingStatusUI(epoch, batch_idx, loss, accuracy, iterTime);
+        updateActivationVis(currentModel!, reconstructedVisData);
+    } else if (type === 'complete') {
+        console.log("Training complete, state set to IDLE.");
+        state.setTrainingState('IDLE');
+        updateBtnStates();
+    } else if (type === 'error') {
+        console.error("Received error(worker):", event.data.message);
+        if (statusElement) statusElement.textContent = `Error: ${event.data.message || event.data}`;
+    }
+};
+
+async function handleTraining() {
+    if (!VISUALIZER) { console.error("Visulizer has not yet loaded for it to run the model."); return; }
+    if (lossGraph) lossGraph.reset();
+
+    state.setTrainingState('TRAINING');
+    updateBtnStates();
+
+    const [x_train, y_train] = await loadDataset();
+
+    const rawVisData = VISUALIZER.getNetworkConfig();                       // this model has nothing to do with the training itself, its being used for the visualizer
+    [currentModel] = createEngineModelFromVisualizer(rawVisData, x_train);
+    
+    const params: NetworkParams = {
+        l_rate: parseFloat((<HTMLInputElement>document.getElementById('learning-rate')).value) || 0.01,
+        epochs: parseInt((<HTMLInputElement>document.getElementById('epoch')).value) || 500,
+        batch_size: parseInt((<HTMLInputElement>document.getElementById('batch-size')).value) || 100,
+    }
+
+    worker.postMessage({
+        type: 'start',
+        rawVisData: VISUALIZER.getNetworkConfig(),
+        x_train_data: x_train.data.buffer,
+        x_train_shape: x_train.shape,
+        y_train_data: y_train.data.buffer,
+        y_train_shape: y_train.shape,
+        trainingParams: params
+    },
+    [x_train.data.buffer, y_train.data.buffer]);
 }
