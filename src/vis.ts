@@ -7,11 +7,21 @@ import { renderNetworkGraph } from "./computational_graph.js";
 import { NeuralNetworkVisualizer } from "./neuralNetworkVisualizer.js";
 import { LossGraph } from "./loss_graph.js";
 
-let currentModel: model.Sequential | null = null; 
+let currentModel: model.Sequential | null = null;
+let VISUALIZER: NeuralNetworkVisualizer;
+let lossGraph: LossGraph;
 
 const mainActionBtn = <HTMLButtonElement>document.getElementById('main-action-btn');
 const stopBtn = <HTMLButtonElement>document.getElementById('stop-btn');
 const statusElement = <HTMLElement>document.getElementById('training-status');
+
+mainActionBtn?.addEventListener('click', handleMainActionClick);
+stopBtn?.addEventListener('click', handleStopClick);
+
+const worker = new Worker(new URL('./worker.ts', import.meta.url), {
+    type: 'module'
+});
+
 
 function downloadObjectAsJSON(exportObj: any, exportName: string): void {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportObj, null, 2));
@@ -38,30 +48,6 @@ function updateBtnStates() {
         }
     }
 }
-
-mainActionBtn?.addEventListener('click', handleMainActionClick);
-stopBtn?.addEventListener('click', handleStopClick);
-
-function handleMainActionClick() {
-    if (!state.getIsTraining()) {
-        handleTraining();
-    } else if (state.getIsPaused()) {
-        state.setTrainingState('TRAINING');
-    } else {
-        state.setTrainingState('PAUSED');
-        updateBtnStates();
-    }
-}
-
-function handleStopClick() {
-    console.log("Stop button clicked: Requesting stop");
-    state.setTrainingState('STOPPING');
-    statusElement.textContent = 'Stopping...';
-    return;
-}
-
-let VISUALIZER: NeuralNetworkVisualizer;
-let lossGraph: LossGraph;
 
 document.addEventListener('DOMContentLoaded', () => {
     VISUALIZER = new NeuralNetworkVisualizer();
@@ -123,12 +109,8 @@ async function loadDataset() {
     return [X, Y]
 }
 
-const worker = new Worker(new URL('./worker.ts', import.meta.url), {
-    type: 'module'
-});
-
 worker.onmessage = (event) => {
-    const {type, epoch, batch_idx, loss, accuracy, iterTime, visData} = event.data;
+    const {type, epoch, batch_idx, loss, accuracy, iterTime, visData, reason} = event.data;
 
     if (type === 'batchEnd') {
 
@@ -155,12 +137,24 @@ worker.onmessage = (event) => {
 
         updateTrainingStatusUI(epoch, batch_idx, loss, accuracy, iterTime);
         updateActivationVis(currentModel!, reconstructedVisData);
-    } else if (type === 'complete') {
-        console.log("Training complete, state set to IDLE.");
+
+        if (state.getIsTraining() && !state.getStopTraining()) {
+            worker.postMessage({ type: 'tick' });
+        }
+
+    } else if (type === 'setupComplete') {
+        console.log("Main thread: Worker setup complete. Starting training ticker.");
+        worker.postMessage({ type: 'tick' });
+    }
+    
+    else if (type === 'complete') {
+        console.log(`Training complete: ${reason}. Stopping ticker.`);
         state.setTrainingState('IDLE');
         updateBtnStates();
     } else if (type === 'error') {
         console.error("Received error(worker):", event.data.message);
+        state.setTrainingState('IDLE');
+        updateBtnStates();
         if (statusElement) statusElement.textContent = `Error: ${event.data.message || event.data}`;
     }
 };
@@ -183,8 +177,9 @@ async function handleTraining() {
         batch_size: parseInt((<HTMLInputElement>document.getElementById('batch-size')).value) || 100,
     }
 
+    console.log("starting training");
     worker.postMessage({
-        type: 'start',
+        type: 'setup',
         rawVisData: VISUALIZER.getNetworkConfig(),
         x_train_data: x_train.data.buffer,
         x_train_shape: x_train.shape,
@@ -193,4 +188,28 @@ async function handleTraining() {
         trainingParams: params
     },
     [x_train.data.buffer, y_train.data.buffer]);
+}
+
+function handleMainActionClick() {
+    if (!state.getIsTraining()) {
+        handleTraining();
+    } else if (state.getIsPaused()) {
+        state.setTrainingState('TRAINING');
+    } else {
+        state.setTrainingState('PAUSED');
+        updateBtnStates();
+    }
+}
+
+function handleStopClick() {
+    console.log("Main thread: Stop button clicked: Sending stop message to worker");
+
+    state.requestStopTraining();
+    state.setTrainingState('STOPPING');
+
+    worker.postMessage({type: 'stop'});
+
+    updateBtnStates();
+    statusElement.textContent = 'Training stopped';
+    return;
 }
