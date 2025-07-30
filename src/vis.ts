@@ -11,48 +11,44 @@ let currentModel: model.Sequential | null = null;
 let VISUALIZER: NeuralNetworkVisualizer;
 let lossGraph: LossGraph;
 
-const mainActionBtn = <HTMLButtonElement>document.getElementById('main-action-btn');
+const startTrainingBtn = <HTMLButtonElement>document.getElementById('start-training-btn');
+const pauseResumeBtn = <HTMLButtonElement>document.getElementById('pauseresume-btn');
 const stopBtn = <HTMLButtonElement>document.getElementById('stop-btn');
 const statusElement = <HTMLElement>document.getElementById('training-status');
-
-mainActionBtn?.addEventListener('click', handleMainActionClick);
-stopBtn?.addEventListener('click', handleStopClick);
 
 const worker = new Worker(new URL('./worker.ts', import.meta.url), {
     type: 'module'
 });
 
-
-function downloadObjectAsJSON(exportObj: any, exportName: string): void {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportObj, null, 2));
-    const x = document.createElement('a');
-    x.setAttribute('href', dataStr);
-    x.setAttribute("download", exportName);
-    document.body.appendChild(x);
-    x.click();
-    x.remove();
-}
-
-function updateBtnStates() {
-    if (!mainActionBtn || !stopBtn) return;
-
-    if (!state.getIsTraining()) {
-        mainActionBtn.textContent = 'Start Training';
-        stopBtn.style.display = 'none';
-    } else {
-        stopBtn.style.display = 'block';
-        if (state.getIsPaused()) {
-            mainActionBtn.textContent = 'Resume';
-        } else {
-            mainActionBtn.textContent = 'Pause';
-        }
-    }
-}
+startTrainingBtn?.addEventListener('click', handleTraining);
+pauseResumeBtn?.addEventListener('click', handlePauseResumeClick);
+stopBtn?.addEventListener('click', handleStopClick);
 
 document.addEventListener('DOMContentLoaded', () => {
     VISUALIZER = new NeuralNetworkVisualizer();
     lossGraph = new LossGraph('loss-accuracy-chart');
 })
+
+function updateBtnStates() {
+    if (!startTrainingBtn || !pauseResumeBtn || !stopBtn) return;
+
+    if (!state.getIsTraining()) {
+        startTrainingBtn.style.display = 'block';
+        startTrainingBtn.textContent = 'Start Training';
+        stopBtn.style.display = 'none';
+        pauseResumeBtn.style.display = 'none';
+    } else {
+        startTrainingBtn.style.display = 'none';
+        stopBtn.style.display = 'block';
+        pauseResumeBtn.style.display = 'block';
+
+        if (state.getIsPaused()) {
+            pauseResumeBtn.textContent = 'Resume';
+        } else {
+            pauseResumeBtn.textContent = 'Pause';
+        }
+    }
+}
 
 // document.getElementById('download-model-btn')?.addEventListener('click', () => {
 //     if (!currentModel) {
@@ -109,59 +105,16 @@ async function loadDataset() {
     return [X, Y]
 }
 
-worker.onmessage = (event) => {
-    const {type, epoch, batch_idx, loss, accuracy, iterTime, visData, reason} = event.data;
-
-    if (type === 'batchEnd') {
-
-        const newSampleX = new Val(visData.sampleX.shape);
-        newSampleX.data = new Float64Array(visData.sampleX.data);
-
-        const reconstructedVisData = {
-            sampleX: newSampleX,
-            sampleY_label: visData.sampleY_label,
-            layerOutputs: visData.layerOutputs.map((x: any) => {
-                const layerOutput: { Z?: Val, A?: Val } = {};
-
-                if (x.Zdata && x.Zshape) {
-                    layerOutput.Z = new Val(x.Zshape);
-                    layerOutput.Z.data = new Float64Array(x.Zdata);
-                }
-                if (x.Adata && x.Ashape) {
-                    layerOutput.A = new Val(x.Ashape);
-                    layerOutput.A.data = new Float64Array(x.Adata)
-                }
-                return layerOutput;
-            })
-        }
-
-        updateTrainingStatusUI(epoch, batch_idx, loss, accuracy, iterTime);
-        updateActivationVis(currentModel!, reconstructedVisData);
-
-        if (state.getIsTraining() && !state.getStopTraining()) {
-            worker.postMessage({ type: 'tick' });
-        }
-
-    } else if (type === 'setupComplete') {
-        console.log("Main thread: Worker setup complete. Starting training ticker.");
-        worker.postMessage({ type: 'tick' });
-    }
-    
-    else if (type === 'complete') {
-        console.log(`Training complete: ${reason}. Stopping ticker.`);
-        state.setTrainingState('IDLE');
-        updateBtnStates();
-    } else if (type === 'error') {
-        console.error("Received error(worker):", event.data.message);
-        state.setTrainingState('IDLE');
-        updateBtnStates();
-        if (statusElement) statusElement.textContent = `Error: ${event.data.message || event.data}`;
-    }
-};
-
 async function handleTraining() {
     if (!VISUALIZER) { console.error("Visulizer has not yet loaded for it to run the model."); return; }
     if (lossGraph) lossGraph.reset();
+
+    if (state.getIsTraining()) {
+        worker.postMessage({type: 'stop'});
+        console.log("Training already in place.")
+    }
+
+    console.log("Main thread: Starting a new training session.")
 
     state.setTrainingState('TRAINING');
     updateBtnStates();
@@ -190,26 +143,98 @@ async function handleTraining() {
     [x_train.data.buffer, y_train.data.buffer]);
 }
 
-function handleMainActionClick() {
-    if (!state.getIsTraining()) {
-        handleTraining();
-    } else if (state.getIsPaused()) {
-        state.setTrainingState('TRAINING');
-    } else {
-        state.setTrainingState('PAUSED');
-        updateBtnStates();
-    }
-}
-
 function handleStopClick() {
     console.log("Main thread: Stop button clicked: Sending stop message to worker");
-
-    state.requestStopTraining();
-    state.setTrainingState('STOPPING');
-
     worker.postMessage({type: 'stop'});
-
-    updateBtnStates();
     statusElement.textContent = 'Training stopped';
+    updateBtnStates();
     return;
 }
+
+function handlePauseResumeClick() {
+    const isPaused = state.getIsPaused();
+    console.log(`Main thread: Pause/Resume clicked. Currently paused: ${isPaused}`);
+
+    if (isPaused) {
+        worker.postMessage({ type: 'resume' });
+    } else {
+        worker.postMessage({ type: 'pause' });
+    }
+    updateBtnStates();
+}
+
+worker.onmessage = (event) => {
+    const {type, epoch, batch_idx, loss, accuracy, iterTime, visData, reason} = event.data;
+
+    switch (type) {
+        case 'setupComplete':
+            console.log("Main thread: Worker setup complete. Starting training ticker.");
+            worker.postMessage({ type: 'tick' });
+            state.setTrainingState('TRAINING');
+            updateBtnStates();
+            break;
+        
+        case 'batchEnd':
+            const newSampleX = new Val(visData.sampleX.shape);
+            newSampleX.data = new Float64Array(visData.sampleX.data);
+
+            const reconstructedVisData = {
+                sampleX: newSampleX,
+                sampleY_label: visData.sampleY_label,
+                layerOutputs: visData.layerOutputs.map((x: any) => {
+                    const layerOutput: { Z?: Val, A?: Val } = {};
+
+                    if (x.Zdata && x.Zshape) {
+                        layerOutput.Z = new Val(x.Zshape);
+                        layerOutput.Z.data = new Float64Array(x.Zdata);
+                    }
+                    if (x.Adata && x.Ashape) {
+                        layerOutput.A = new Val(x.Ashape);
+                        layerOutput.A.data = new Float64Array(x.Adata)
+                    }
+                    return layerOutput;
+                })
+            }
+
+            updateTrainingStatusUI(epoch, batch_idx, loss, accuracy, iterTime);
+            updateActivationVis(currentModel!, reconstructedVisData);
+
+            if (state.getIsTraining() && !state.getStopTraining()) {
+                worker.postMessage({ type: 'tick' });
+            }
+            break;
+
+        case 'epochEnd':
+            console.log("Main thread: 'epochEnd'.");
+            if (state.getIsTraining()) {
+                worker.postMessage({ type: 'tick' });
+            }
+            break;
+
+        case 'paused':
+            console.log("Main thread: Received 'paused' confirmation.");
+            state.setTrainingState('PAUSED');
+            updateBtnStates();
+            break;
+
+        case 'resumed':
+            console.log("Main thread: Received 'resumed' confirmation.");
+            state.setTrainingState('TRAINING');
+            updateBtnStates();
+            worker.postMessage({ type: 'tick' });
+            break;
+
+        case 'complete':
+            console.log(`Training complete: ${reason}. Received 'complete' confirmation. Stopping ticker.`);
+            state.setTrainingState('IDLE');
+            updateBtnStates();
+            break;
+        
+        case 'error':
+            console.error("Received error(worker):", event.data.message);
+            state.setTrainingState('IDLE');
+            updateBtnStates();
+            if (statusElement) statusElement.textContent = `Error: ${event.data.message || event.data}`;
+            break;
+    }
+};

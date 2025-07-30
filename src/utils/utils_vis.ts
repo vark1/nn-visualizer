@@ -9,3 +9,13 @@ export function getLayerColor(type: LayerType): string {
     };
     return colors[type] || '#999';
 }
+
+function downloadObjectAsJSON(exportObj: any, exportName: string): void {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportObj, null, 2));
+    const x = document.createElement('a');
+    x.setAttribute('href', dataStr);
+    x.setAttribute("download", exportName);
+    document.body.appendChild(x);
+    x.click();
+    x.remove();
+}

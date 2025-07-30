@@ -34,14 +34,17 @@ self.onmessage = async (event) => {
         case 'stop':
             console.log("Worker: Received 'stop' message.");
             state.requestStopTraining();
+            state.setTrainingState('STOPPING');
             break;
         case 'pause':
             console.log("Worker: Received 'pause' message.");
             state.requestPause();
+            self.postMessage({ type: 'paused' }); 
             break;
         case 'resume':
             console.log("Worker: Received 'resume' message.");
             state.requestResume();
+            self.postMessage({ type: 'resumed' });
             break;
     }
 };
